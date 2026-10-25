@@ -1,21 +1,22 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
-import { Link, NavLink, Route, Routes, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowDownToLine, ArrowRight, Award, BarChart3, BriefcaseBusiness, Check, CheckCircle2,
-  ChevronDown, CircleHelp, FileCheck2, FileText, GraduationCap, LayoutDashboard,
-  ListChecks, Menu, Plus, Printer, Quote, Sparkles, Target, Trash2, Upload, WandSparkles,
-  X,
+  ChevronDown, ChevronLeft, ChevronRight, CircleHelp, FileCheck2, FileText, GraduationCap,
+  LayoutDashboard, ListChecks, LogOut, Menu, Plus, Printer, Quote, Sparkles, Target,
+  Trash2, Upload, WandSparkles, X,
 } from 'lucide-react'
 import { analyzeResume, extractKeywords } from './analysis'
+import { isAuthConfigured, supabase, useAuth } from './auth'
 import { createSampleResume, deleteResume, getAnalyses, getResumes, saveAnalysis, saveResume } from './storage'
 import type { AtsAnalysis, EducationEntry, ExperienceEntry, Resume, ResumeTemplate } from './types'
 
-const navItems = [
-  { label: 'Home', to: '/', icon: LayoutDashboard },
-  { label: 'Features', to: '/#features', icon: Sparkles },
-  { label: 'Resume Builder', to: '/builder', icon: FileText },
-  { label: 'ATS Checker', to: '/ats-checker', icon: Target },
-  { label: 'About', to: '/#about', icon: CircleHelp },
+const resumeTemplates: { id: ResumeTemplate; name: string; description: string }[] = [
+  { id: 'classic', name: 'Classic', description: 'A centered, timeless layout for any career stage.' },
+  { id: 'modern', name: 'Modern', description: 'A crisp, contemporary layout with a bold accent.' },
+  { id: 'minimal', name: 'Minimal', description: 'A calm, spacious design with refined typography.' },
+  { id: 'professional', name: 'Professional', description: 'A structured layout with clear, confident headings.' },
+  { id: 'creative', name: 'Creative', description: 'A distinctive color-block header for creative roles.' },
 ]
 
 function Brand({ light = false }: { light?: boolean }) {
@@ -27,33 +28,42 @@ function Brand({ light = false }: { light?: boolean }) {
 
 function Header({ app = false }: { app?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const { user, isAdmin, authError, signOut } = useAuth()
+  const links = isAdmin
+    ? [{ label: 'Admin dashboard', to: '/dashboard' }, { label: 'Resume builder', to: '/builder' }, { label: 'ATS checker', to: '/ats-checker' }, { label: 'About', to: '/about' }]
+    : user
+      ? [{ label: 'Templates', to: '/#templates' }, { label: 'My resume', to: '/builder' }, { label: 'ATS checker', to: '/ats-checker' }]
+      : [{ label: 'Resume templates', to: '/#templates' }]
+  const ctaTo = isAdmin ? '/dashboard' : user ? '/builder?new=1' : '/auth?mode=signup'
   return <header className={`topbar ${app ? 'app-topbar' : ''}`}>
     <div className="topbar-inner">
       <Brand />
       <button className="mobile-menu icon-button" aria-label="Toggle navigation" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X /> : <Menu />}</button>
       <nav className={`main-nav ${menuOpen ? 'nav-open' : ''}`} aria-label="Main navigation">
-        {navItems.map(({ label, to }) => to.includes('#')
-          ? <a key={label} href={to} onClick={() => setMenuOpen(false)}>{label}</a>
-          : <NavLink key={label} to={to} onClick={() => setMenuOpen(false)}>{label}</NavLink>)}
+        {links.map(({ label, to }) => <Link key={label} to={to} onClick={() => setMenuOpen(false)}>{label}</Link>)}
       </nav>
-      <Link className="button button-primary top-cta" to="/builder">Build my resume <ArrowRight size={16} /></Link>
+      {authError && <span className="auth-header-error" role="alert">{authError}</span>}
+      {user && <button className="auth-signout" onClick={() => void signOut()} aria-label="Sign out"><LogOut size={16} /><span>Sign out</span></button>}
+      <Link className="button button-primary top-cta" to={ctaTo}>{isAdmin ? 'Admin workspace' : user ? 'Continue editing' : 'Get started'} <ArrowRight size={16} /></Link>
     </div>
   </header>
 }
 
 function Sidebar() {
+  const { user, isAdmin } = useAuth()
   return <aside className="sidebar">
-    <p className="sidebar-label">WORKSPACE</p>
-    <NavLink end to="/dashboard" className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><LayoutDashboard size={18} /> Dashboard</NavLink>
+    <p className="sidebar-label">{isAdmin ? 'ADMIN WORKSPACE' : 'YOUR RESUME'}</p>
+    {isAdmin && <NavLink end to="/dashboard" className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><LayoutDashboard size={18} /> Dashboard</NavLink>}
     <NavLink to="/builder" className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><FileText size={18} /> Resume builder</NavLink>
     <NavLink to="/ats-checker" className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><Target size={18} /> ATS checker <span className="side-new">NEW</span></NavLink>
-    <div className="sidebar-tip">
+    {isAdmin && <NavLink to="/about" className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><CircleHelp size={18} /> About</NavLink>}
+    {isAdmin && <div className="sidebar-tip">
       <span className="tip-icon"><Sparkles size={16} /></span>
       <strong>A little progress goes a long way</strong>
       <p>Tailor your resume to each role for a stronger application.</p>
       <Link to="/ats-checker">Check your match <ArrowRight size={14} /></Link>
-    </div>
-    <div className="sidebar-bottom"><span className="avatar">R</span><span><strong>ResumeAI</strong><small>Free workspace</small></span><ChevronDown size={16} /></div>
+    </div>}
+    <div className="sidebar-bottom"><span className="avatar">{isAdmin ? 'A' : (user?.email?.[0] ?? 'U').toUpperCase()}</span><span><strong>{isAdmin ? 'Admin' : 'My account'}</strong><small>{user?.email ?? 'ResumeAI'}</small></span><ChevronDown size={16} /></div>
   </aside>
 }
 
@@ -62,10 +72,12 @@ function AppShell({ children }: { children: ReactNode }) {
 }
 
 function LandingPage() {
+  const { user, isAdmin } = useAuth()
+  const navigate = useNavigate()
   const faqs = [
-    ['Is ResumeAI free to use?', 'Yes. The resume builder and rule-based ATS checker work locally in your browser with no paid service or account required.'],
+    ['Is ResumeAI free to use?', 'Yes. Sign up for a free account to create and edit your resume in your browser.'],
     ['Does the ATS score guarantee an interview?', 'No. It is an estimate based on visible keyword overlap, section headings, and text length—not a real employer ATS or hiring prediction.'],
-    ['Are my resume details uploaded anywhere?', 'No. Your drafts and ATS history are stored in this browser only. Files are read locally and are not sent to a server.'],
+    ['Are my resume details uploaded anywhere?', 'Resume drafts and ATS history are stored locally in your browser and separated by signed-in account. Uploaded files are read locally.'],
   ]
   return <div className="landing">
     <Header />
@@ -76,8 +88,8 @@ function LandingPage() {
           <h1>Build a resume<br />that gets <span>noticed.</span></h1>
           <p className="hero-subtitle">A clearer story. A stronger first impression. Build a polished resume and see how it aligns with the job you want.</p>
           <div className="hero-actions">
-            <Link className="button button-primary button-lg" to="/builder">Build my resume <ArrowRight size={18} /></Link>
-            <Link className="button button-outline button-lg" to="/ats-checker"><Target size={17} /> Check ATS score</Link>
+            <Link className="button button-primary button-lg" to={user ? '/builder?new=1' : '/auth?mode=signup'}>Build my resume <ArrowRight size={18} /></Link>
+            <a className="button button-outline button-lg" href="#templates"><FileText size={17} /> Explore templates</a>
           </div>
           <div className="hero-trust"><div className="avatar-stack"><span>A</span><span>M</span><span>J</span></div><span>Made for your next big step</span><span className="trust-separator">·</span><span><Check size={14} /> Free to start</span></div>
         </div>
@@ -95,6 +107,11 @@ function LandingPage() {
           <div className="hero-caption"><span className="caption-spark"><Sparkles size={15} /></span> Your story, made job-ready.</div>
         </div>
       </section>
+      <TemplateGallery onSelect={(template) => {
+        if (user) navigate(`/builder?new=1&template=${template}`)
+        else navigate(`/auth?mode=signup&template=${template}`)
+      }} />
+      {isAdmin && <>
       <section id="features" className="section-wrap feature-section">
         <div className="section-heading"><div className="eyebrow centered">EVERYTHING YOU NEED TO GET STARTED</div><h2>Make your next move<br />with <span>confidence.</span></h2><p>From the first draft to the final check, get the tools to put your best foot forward.</p></div>
         <div className="feature-grid">
@@ -115,13 +132,40 @@ function LandingPage() {
       </section>
       <section className="benefits section-wrap">
         <div className="benefit-art"><div className="benefit-paper"><span className="paper-check"><Check size={19} /></span><span className="paper-title">Your experience, clearly told.</span><span className="paper-row" /><span className="paper-row short" /><span className="paper-row" /><span className="paper-tag">Saved automatically</span></div><div className="benefit-orbit"><Sparkles size={20} /></div></div>
-        <div className="benefit-copy"><div className="eyebrow">A BETTER WAY TO BEGIN</div><h2>Good resumes start<br />with <span>your real story.</span></h2><p>ResumeAI helps you organize and present your experience. Your details stay on your device, and every suggestion is yours to review.</p><ul className="benefit-list"><li><CheckCircle2 /> Your drafts save as you work</li><li><CheckCircle2 /> No account or API key needed</li><li><CheckCircle2 /> Helpful estimates—not hiring promises</li></ul><Link className="button button-primary" to="/builder">Start building <ArrowRight size={16} /></Link></div>
+        <div className="benefit-copy"><div className="eyebrow">A BETTER WAY TO BEGIN</div><h2>Good resumes start<br />with <span>your real story.</span></h2><p>ResumeAI helps you organize and present your experience. Your details stay on your device, and every suggestion is yours to review.</p><ul className="benefit-list"><li><CheckCircle2 /> Your drafts save as you work</li><li><CheckCircle2 /> Separate signed-in workspaces</li><li><CheckCircle2 /> Helpful estimates—not hiring promises</li></ul><Link className="button button-primary" to="/builder">Start building <ArrowRight size={16} /></Link></div>
       </section>
       <section className="faq-section"><div className="section-wrap"><div className="section-heading"><div className="eyebrow centered">GOOD TO KNOW</div><h2>Questions, <span>answered.</span></h2><p>A few things you might be wondering before you get started.</p></div><div className="faq-list">{faqs.map(([question, answer]) => <details className="faq-item" key={question}><summary>{question}<ChevronDown size={18} /></summary><p>{answer}</p></details>)}</div></div></section>
       <section id="about" className="closing-cta section-wrap"><div className="cta-spark"><Sparkles /></div><div><h2>Your next chapter starts here.</h2><p>Build a resume that sounds like you—and shows what you can do.</p></div><Link className="button button-white" to="/builder">Create your resume <ArrowRight size={17} /></Link></section>
+      </>}
     </main>
-    <footer className="footer"><div className="section-wrap footer-inner"><Brand /><span>Thoughtful tools for your next opportunity.</span><div><Link to="/builder">Resume Builder</Link><Link to="/ats-checker">ATS Checker</Link><Link to="/dashboard">Dashboard</Link></div><small>© 2025 ResumeAI. Your story stays yours.</small></div></footer>
+    {isAdmin && <footer className="footer"><div className="section-wrap footer-inner"><Brand /><span>Thoughtful tools for your next opportunity.</span><div><Link to="/builder">Resume Builder</Link><Link to="/ats-checker">ATS Checker</Link><Link to="/dashboard">Dashboard</Link></div><small>© 2025 ResumeAI. Your story stays yours.</small></div></footer>}
   </div>
+}
+
+function TemplateGallery({ onSelect }: { onSelect: (template: ResumeTemplate) => void }) {
+  const railRef = useRef<HTMLDivElement>(null)
+  const scroll = (direction: -1 | 1) => {
+    railRef.current?.scrollBy({ left: direction * 330, behavior: 'smooth' })
+  }
+  return <section className="template-gallery section-wrap" id="templates">
+    <div className="gallery-heading">
+      <div><div className="eyebrow">FIND YOUR STYLE</div><h2>Five templates.<br /><span>One great first impression.</span></h2><p>Preview a design, choose your favorite, then add your details.</p></div>
+      <div className="gallery-controls"><button className="icon-button" aria-label="Scroll templates left" onClick={() => scroll(-1)}><ChevronLeft size={19} /></button><button className="icon-button" aria-label="Scroll templates right" onClick={() => scroll(1)}><ChevronRight size={19} /></button></div>
+    </div>
+    <div className="template-rail" ref={railRef} aria-label="Resume templates">
+      {resumeTemplates.map((template) => <button className="template-card" key={template.id} onClick={() => onSelect(template.id)}>
+        <span className={`template-mini template-mini-${template.id}`} aria-hidden="true">
+          <span className="mini-header"><span className="mini-avatar">JL</span><span><b>Jordan Lee</b><small>PRODUCT DESIGNER</small></span></span>
+          <span className="mini-contact">jordan.lee@example.com · New York, NY</span>
+          <span className="mini-section"><b>PROFILE</b><i /><i /><i /></span>
+          <span className="mini-section"><b>EXPERIENCE</b><strong>Product Designer</strong><i /><i /></span>
+          <span className="mini-section mini-skills"><b>SKILLS</b><em>Research</em><em>Strategy</em><em>Design</em></span>
+        </span>
+        <span className="template-card-info"><span><strong>{template.name}</strong><small>{template.description}</small></span><span className="template-card-action">Choose <ArrowRight size={14} /></span></span>
+      </button>)}
+    </div>
+    {!isAuthConfigured && <p className="gallery-note">Sign-in will be available once the site administrator finishes account setup.</p>}
+  </section>
 }
 
 function FeatureCard({ icon, number, title, text, href, link }: { icon: ReactNode; number: string; title: string; text: string; href: string; link: string }) {
@@ -130,6 +174,105 @@ function FeatureCard({ icon, number, title, text, href, link }: { icon: ReactNod
 
 function Step({ number, icon, title, text }: { number: string; icon: ReactNode; title: string; text: string }) {
   return <div className="step"><span className="step-number">{number}</span><span className="step-icon">{icon}</span><div><h3>{title}</h3><p>{text}</p></div></div>
+}
+
+function AuthPage() {
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const [mode, setMode] = useState(searchParams.get('mode') === 'signup' ? 'signup' : 'signin')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const destinationFor = (accountEmail: string, appMetadata: Record<string, unknown>) => {
+    const requested = searchParams.get('next')
+    const isAdmin = accountEmail.toLowerCase() === 'ankurempire008@gmail.com' && appMetadata.role === 'admin'
+    let destination = requested?.startsWith('/') && !requested.startsWith('//') ? requested : (isAdmin ? '/dashboard' : '/builder?new=1')
+    if (!isAdmin && (destination.startsWith('/dashboard') || destination.startsWith('/about'))) destination = '/builder?new=1'
+    if (destination === '/builder' || destination.startsWith('/builder?new=1')) {
+      const template = searchParams.get('template')
+      if (template && resumeTemplates.some((item) => item.id === template) && !destination.includes('template=')) {
+        destination += `${destination.includes('?') ? '&' : '?'}template=${encodeURIComponent(template)}`
+      }
+    }
+    return destination
+  }
+
+  useEffect(() => {
+    if (user) navigate(destinationFor(user.email ?? '', user.app_metadata), { replace: true })
+  }, [user, navigate])
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setError('')
+    setMessage('')
+    if (!supabase) {
+      setError('Sign-in is not configured. Ask the site administrator to finish the Supabase setup.')
+      return
+    }
+    setIsSubmitting(true)
+    try {
+      if (mode === 'signin') {
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+        if (signInError) throw signInError
+        navigate(destinationFor(data.user.email ?? email, data.user.app_metadata), { replace: true })
+      } else {
+        const redirectUrl = new URL('/auth', window.location.origin)
+        redirectUrl.searchParams.set('mode', 'signin')
+        const selectedTemplate = searchParams.get('template')
+        if (selectedTemplate && resumeTemplates.some((item) => item.id === selectedTemplate)) {
+          redirectUrl.searchParams.set('template', selectedTemplate)
+        }
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { emailRedirectTo: redirectUrl.toString() },
+        })
+        if (signUpError) throw signUpError
+        if (data.session && data.user) navigate(destinationFor(data.user.email ?? email, data.user.app_metadata), { replace: true })
+        else setMessage('Check your email to confirm your account, then sign in to continue.')
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Sign-in failed. Please try again.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return <div className="auth-page">
+    <Header />
+    <main className="auth-panel panel">
+      <Brand />
+      <div className="eyebrow">YOUR RESUME WORKSPACE</div>
+      <h1>{mode === 'signin' ? 'Welcome back' : 'Create your account'}</h1>
+      <p>{mode === 'signin' ? 'Sign in to continue to your resume workspace.' : 'Create a free account to start with your chosen template.'}</p>
+      {!isAuthConfigured
+        ? <div className="inline-error" role="alert">Authentication isn’t configured yet. The site owner must add <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> in Vercel and redeploy.</div>
+        : <form className="auth-form" onSubmit={(event) => void submit(event)}>
+          <label className="field"><span>Email</span><input type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label>
+          <label className="field"><span>Password</span><input type="password" autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} minLength={8} required value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 8 characters" /></label>
+          {error && <div className="inline-error" role="alert">{error}</div>}
+          {message && <div className="auth-success" role="status">{message}</div>}
+          <button className="button button-primary" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Create account'}</button>
+        </form>}
+      <button className="auth-mode-toggle" onClick={() => { setError(''); setMessage(''); setMode(mode === 'signin' ? 'signup' : 'signin') }}>
+        {mode === 'signin' ? 'New here? Create an account' : 'Already registered? Sign in'}
+      </button>
+      <Link className="back-link" to="/">← Back to templates</Link>
+    </main>
+  </div>
+}
+
+function RequireAccess({ children, adminOnly = false }: { children: ReactNode; adminOnly?: boolean }) {
+  const { user, isAdmin, isLoading } = useAuth()
+  const location = useLocation()
+  if (isLoading) return <main className="auth-loading" role="status">Checking your session…</main>
+  if (!user) return <Navigate to={`/auth?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`} replace />
+  if (adminOnly && !isAdmin) return <Navigate to="/builder" replace />
+  return children
 }
 
 function Dashboard() {
@@ -147,7 +290,7 @@ function Dashboard() {
       refresh()
     }
   }
-  return <AppShell><div className="page-heading dashboard-heading"><div><div className="eyebrow">YOUR WORKSPACE</div><h1>Welcome to your dashboard</h1><p>Pick up where you left off or start a fresh draft.</p></div><button className="button button-primary" onClick={create}><Plus size={17} /> Create new resume</button></div>
+  return <AppShell><div className="page-heading dashboard-heading"><div><div className="eyebrow">ADMIN WORKSPACE</div><h1>Admin dashboard</h1><p>Manage your resume workspace and review local activity on this device.</p></div><button className="button button-primary" onClick={create}><Plus size={17} /> Create new resume</button></div>
     <div className="stat-grid">
       <StatCard icon={<FileText />} label="Resumes created" value={resumes.length.toString()} note="Saved in this browser" />
       <StatCard icon={<Target />} label="ATS checks" value={analyses.length.toString()} note="Analysis history" />
@@ -172,16 +315,21 @@ function StatCard({ icon, label, value, note }: { icon: ReactNode; label: string
 }
 
 function templateLabel(template: ResumeTemplate) {
-  return template === 'modern' ? 'Modern' : template === 'minimal' ? 'Minimal' : 'Classic'
+  return resumeTemplates.find((item) => item.id === template)?.name ?? 'Classic'
 }
 
 function BuilderPage() {
+  const { isAdmin } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const resumeId = searchParams.get('id')
   const isNew = searchParams.get('new') === '1'
   const [resume, setResume] = useState<Resume>(() => {
     const saved = resumeId ? getResumes().find((item) => item.id === resumeId) : undefined
-    return saved ?? createSampleResume()
+    if (saved) return saved
+    const initial = createSampleResume()
+    const selectedTemplate = resumeTemplates.find((item) => item.id === searchParams.get('template'))
+    if (isNew && selectedTemplate) initial.template = selectedTemplate.id
+    return initial
   })
   const [savedMessage, setSavedMessage] = useState('Saved to this device')
   const [showAssistant, setShowAssistant] = useState(false)
@@ -236,8 +384,8 @@ function BuilderPage() {
     return undefined
   }, [searchParams, setSearchParams])
 
-  return <AppShell><div className="builder-heading page-heading"><div><Link className="back-link" to="/dashboard">← Back to dashboard</Link><h1>Resume builder</h1><p>{resume.isExample ? 'Example content is prefilled; replace it with your details. Changes save automatically.' : 'Your changes save automatically on this device.'}</p></div><div className="builder-heading-actions"><span className="save-status"><CheckCircle2 size={15} /> {savedMessage}</span><button className="button button-primary" onClick={() => void downloadPdf()}><ArrowDownToLine size={17} /> Download PDF</button></div></div>
-    <div className="builder-toolbar"><div className="resume-name-control"><FileText size={16} /><input aria-label="Resume draft name" value={resume.name} onChange={(event) => patch('name', event.target.value)} /></div><div className="template-control"><span>Template</span>{(['classic', 'modern', 'minimal'] as ResumeTemplate[]).map((template) => <button key={template} onClick={() => update({ ...resume, template }, false)} className={`template-choice ${resume.template === template ? 'selected' : ''}`} aria-pressed={resume.template === template}>{templateLabel(template)}</button>)}</div><button className="assistant-toggle" onClick={() => setShowAssistant(!showAssistant)}><Sparkles size={16} /> Writing assistant</button></div>
+  return <AppShell><div className="builder-heading page-heading"><div><Link className="back-link" to={isAdmin ? '/dashboard' : '/'}>{isAdmin ? '← Back to dashboard' : '← Back to templates'}</Link><h1>Resume builder</h1><p>{resume.isExample ? 'Example content is prefilled; replace it with your details. Changes save automatically.' : 'Your changes save automatically on this device.'}</p></div><div className="builder-heading-actions"><span className="save-status"><CheckCircle2 size={15} /> {savedMessage}</span><button className="button button-primary" onClick={() => void downloadPdf()}><ArrowDownToLine size={17} /> Download PDF</button></div></div>
+    <div className="builder-toolbar"><div className="resume-name-control"><FileText size={16} /><input aria-label="Resume draft name" value={resume.name} onChange={(event) => patch('name', event.target.value)} /></div><div className="template-control"><span>Template</span>{resumeTemplates.map(({ id: template }) => <button key={template} onClick={() => update({ ...resume, template }, false)} className={`template-choice ${resume.template === template ? 'selected' : ''}`} aria-pressed={resume.template === template}>{templateLabel(template)}</button>)}</div><button className="assistant-toggle" onClick={() => setShowAssistant(!showAssistant)}><Sparkles size={16} /> Writing assistant</button></div>
     {printError && <div className="inline-error" role="alert">{printError}</div>}
     <div className="builder-layout">
       <div className="editor-column">
@@ -454,7 +602,7 @@ function AnalysisResult({ analysis, resumeText }: { analysis: AtsAnalysis; resum
 }
 
 function AboutPage() {
-  return <AppShell><div className="page-heading"><div><div className="eyebrow">ABOUT RESUMEAI</div><h1>Your story deserves a clear start.</h1><p>A beginner-friendly resume toolkit for students and early-career job seekers.</p></div></div><div className="panel about-panel"><h2>Built to help you get started</h2><p>ResumeAI brings together a guided resume editor, professional templates, browser-based PDF export, and a transparent keyword checker. It’s designed for a practical project demonstration: every core flow works without sign-up, paid services, or an AI API.</p><div className="about-cards"><div><FileCheck2 /><strong>Local-first by default</strong><span>Drafts and analysis history live in your browser’s local storage.</span></div><div><Target /><strong>Clear scoring rules</strong><span>ATS estimates use visible, explainable rules—not random predictions.</span></div><div><Sparkles /><strong>Honest writing help</strong><span>Rule-based refinements improve clarity without inventing qualifications.</span></div></div><Link className="button button-primary" to="/builder">Start building <ArrowRight size={16} /></Link></div></AppShell>
+  return <AppShell><div className="page-heading"><div><div className="eyebrow">ABOUT RESUMEAI</div><h1>Your story deserves a clear start.</h1><p>A beginner-friendly resume toolkit for students and early-career job seekers.</p></div></div><div className="panel about-panel"><h2>Built to help you get started</h2><p>ResumeAI brings together a guided resume editor, five professional templates, browser-based PDF export, and a transparent keyword checker. Sign-in separates admin and user workspaces. No paid AI service or API is needed.</p><div className="about-cards"><div><FileCheck2 /><strong>Local-first by default</strong><span>Drafts and analysis history are separated by account in browser storage.</span></div><div><Target /><strong>Clear scoring rules</strong><span>ATS estimates use visible, explainable rules—not random predictions.</span></div><div><Sparkles /><strong>Honest writing help</strong><span>Rule-based refinements improve clarity without inventing qualifications.</span></div></div><Link className="button button-primary" to="/builder">Start building <ArrowRight size={16} /></Link></div></AppShell>
 }
 
 function NotFound() {
@@ -464,10 +612,11 @@ function NotFound() {
 export default function App() {
   return <Routes>
     <Route path="/" element={<LandingPage />} />
-    <Route path="/dashboard" element={<Dashboard />} />
-    <Route path="/builder" element={<BuilderPage />} />
-    <Route path="/ats-checker" element={<AtsCheckerPage />} />
-    <Route path="/about" element={<AboutPage />} />
+    <Route path="/auth" element={<AuthPage />} />
+    <Route path="/dashboard" element={<RequireAccess adminOnly><Dashboard /></RequireAccess>} />
+    <Route path="/builder" element={<RequireAccess><BuilderPage /></RequireAccess>} />
+    <Route path="/ats-checker" element={<RequireAccess><AtsCheckerPage /></RequireAccess>} />
+    <Route path="/about" element={<RequireAccess adminOnly><AboutPage /></RequireAccess>} />
     <Route path="*" element={<NotFound />} />
   </Routes>
 }

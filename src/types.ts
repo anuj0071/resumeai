@@ -1,4 +1,4 @@
-export type ResumeTemplate = 'classic' | 'modern' | 'minimal'
+export type ResumeTemplate = 'classic' | 'modern' | 'minimal' | 'professional' | 'creative'
 
 export interface ExperienceEntry {
   role: string

@@ -1,7 +1,14 @@
 import type { AtsAnalysis, Resume } from './types'
 
-const RESUMES_KEY = 'resumeai.resumes'
-const ANALYSES_KEY = 'resumeai.analyses'
+let storageScope: string | null = null
+
+export function setStorageScope(userId: string | null) {
+  storageScope = userId
+}
+
+function storageKey(kind: 'resumes' | 'analyses') {
+  return `resumeai.${storageScope ?? 'anonymous'}.${kind}`
+}
 
 function readArray<T>(key: string): T[] {
   try {
@@ -12,8 +19,8 @@ function readArray<T>(key: string): T[] {
   }
 }
 
-export const getResumes = () => readArray<Resume>(RESUMES_KEY)
-export const getAnalyses = () => readArray<AtsAnalysis>(ANALYSES_KEY)
+export const getResumes = () => readArray<Resume>(storageKey('resumes'))
+export const getAnalyses = () => readArray<AtsAnalysis>(storageKey('analyses'))
 
 export function saveResume(resume: Resume) {
   const resumes = getResumes()
@@ -21,16 +28,16 @@ export function saveResume(resume: Resume) {
   const next = { ...resume, updatedAt: new Date().toISOString() }
   if (index === -1) resumes.unshift(next)
   else resumes[index] = next
-  localStorage.setItem(RESUMES_KEY, JSON.stringify(resumes))
+  localStorage.setItem(storageKey('resumes'), JSON.stringify(resumes))
 }
 
 export function deleteResume(id: string) {
-  localStorage.setItem(RESUMES_KEY, JSON.stringify(getResumes().filter((resume) => resume.id !== id)))
+  localStorage.setItem(storageKey('resumes'), JSON.stringify(getResumes().filter((resume) => resume.id !== id)))
 }
 
 export function saveAnalysis(analysis: AtsAnalysis) {
   const analyses = [analysis, ...getAnalyses()].slice(0, 30)
-  localStorage.setItem(ANALYSES_KEY, JSON.stringify(analyses))
+  localStorage.setItem(storageKey('analyses'), JSON.stringify(analyses))
 }
 
 export function createSampleResume(): Resume {
